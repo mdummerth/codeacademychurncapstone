@@ -1,3 +1,6 @@
+/*** The first iteration of this code gives you the churn rates for each segment each month.
+     Below that I show how to alter the status_aggregate and churn calculations to answer each question. ***/
+     
 WITH months AS
  (SELECT '2017-01-01' AS first_day,
          '2017-01-31' AS last_day
@@ -9,20 +12,20 @@ WITH months AS
         '2017-03-31' AS last_day),
 cross_join AS
  (SELECT *
- 	FROM subscriptions
+  FROM subscriptions
   CROSS JOIN months),
 status AS
   (SELECT id, 
           first_day AS month,
           CASE WHEN
-   	        segment = 87 AND
+   	    segment = 87 AND
             (subscription_start < first_day) AND
             ((subscription_end > first_day) OR subscription_end IS NULL)
             THEN '1'
             ELSE '0'
             END AS is_active_87,
           CASE WHEN
-   	        segment = 30 AND
+   	    segment = 30 AND
             (subscription_start < first_day) AND
             ((subscription_end > first_day) OR(subscription_end IS NULL))
             THEN '1'
@@ -31,15 +34,15 @@ status AS
           CASE WHEN
             segment = 87 AND
             (subscription_end BETWEEN first_day and last_day)
- 		        THEN '1' 
+            THEN '1' 
             ELSE '0'
- 	          END AS is_canceled_87,
+ 	    END AS is_canceled_87,
           CASE WHEN
             segment = 30 AND
             (subscription_end BETWEEN first_day and last_day)
- 		        THEN '1' 
+            THEN '1' 
             ELSE '0'
- 	          END AS is_canceled_30
+ 	    END AS is_canceled_30
    FROM cross_join),
 status_aggregate AS
   (SELECT month,
@@ -50,7 +53,45 @@ status_aggregate AS
    FROM status
    GROUP BY month)
 SELECT month, 
-	     1.0 * sum_canceled_87/sum_active_87 AS churn_rate_87,
+       1.0 * sum_canceled_87/sum_active_87 AS churn_rate_87,
        1.0 * sum_canceled_30/sum_active_30 AS churn_rate_30
+FROM status_aggregate
+GROUP BY month;
+
+/*** In order to calculate overall churn for each segment remove SELECT month and GROUP BY month ***/
+
+status_aggregate AS
+  (SELECT
+         SUM(is_active_87) AS sum_active_87,
+         SUM(is_active_30) AS sum_active_30,
+         SUM(is_canceled_87) AS sum_canceled_87,
+         SUM(is_canceled_30) AS sum_canceled_30
+   FROM status)
+SELECT  
+       1.0 * sum_canceled_87/sum_active_87 AS churn_rate_87,
+       1.0 * sum_canceled_30/sum_active_30 AS churn_rate_30
+FROM status_aggregate;
+
+/*** To get your overall churn you sum together the two segments ***/
+
+status_aggregate AS
+(SELECT 
+        SUM((is_active_87) + (is_active_30)) AS sum_active,
+        SUM((is_canceled_87) + (is_canceled_30)) AS sum_canceled
+ FROM status)
+SELECT  
+	1.0 * sum_canceled/sum_active AS churn_rate
+FROM status_aggregate;
+
+/*** To calculate overall churn by month adding the SELECT and GROUP BY month back in gives you that data ***/
+
+status_aggregate AS
+(SELECT month,
+        SUM((is_active_87) + (is_active_30)) AS sum_active,
+        SUM((is_canceled_87) + (is_canceled_30)) AS sum_canceled
+ FROM status
+ GROUP BY month)
+SELECT month, 
+	1.0 * sum_canceled/sum_active AS churn_rate
 FROM status_aggregate
 GROUP BY month;
